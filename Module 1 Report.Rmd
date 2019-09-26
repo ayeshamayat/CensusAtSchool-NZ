@@ -1,0 +1,398 @@
+---
+title: "Module 1 Report"
+output: html_document
+author: "SID: 430345827" 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# CensusAtSchool NZ
+
+### Question 1: Who collects this data and how is is reported?
+The data for CensusAtSchool NZ is from a voluntary survey taken by students during school time. The data collected contributes to an international database with common questions between countries with additional questions tailored to the children of New Zealand.
+
+The data is available online to the public and classroom resources are available to teachers. Some of the aims of the initiative is to "improve understanding of a data gathering process", "foster a positive attitude to statistics", and "encourage effective IT learning and teaching".
+
+To begin, a random sample of the data set was extracted form the CensusAtSchool NA 2019 database (REFERENCE HERE: https://new.censusatschool.org.nz/random-sampler/) using its random sampler. The parameters used were "All years", "All genders", and "All regions" in the subpopulation field, "All variables", and a stratifies sample by "Year" with 20 sample sizes from each group. This gave a total of 200 entries in our data set. We then read in the data.
+
+``` {r Data}
+library("tidyverse")
+NZdata_orignial <- readr::read_csv("https://raw.github.sydney.edu.au/amay8826/DATA2002/master/data/NZ_data.csv?token=AAANdvJ6AgXcbt2FW14h9Vwt1dTfmHvkks5dcxfcwA%3D%3D")
+```
+
+Next, we clean the data. We will begin by reformatting the column titles using janitor's 'clean_names' function to have them all in snake case.
+
+``` {r Clean}
+NZdata = NZdata_orignial
+NZdata <- janitor::clean_names(NZdata, 'snake')
+```
+
+### Question 2: How are missing values recorded, and why might they occur?
+
+Now we will check for missing values. From inspecting the csv file, missing values have been left empty. We will count how many missing values there are overall and how many columns contain missing values using the 'sum' and 'is.na' function.
+
+``` {r Missing Values}
+# Total NA
+sum(is.na(NZdata))
+
+# Number of rows with NA
+# For each row in the data set check whether there is at least one missing value. If so, increment the num_NA variable.
+i=0
+num_NA = 0
+for (i in 1:nrow(NZdata_orignial)) {
+  if (sum(is.na(NZdata_orignial[i,])) >= 1) {
+    num_NA = num_NA + 1 
+  }
+}
+num_NA
+```
+
+There are 1,679 missing data entries, and 196 rows that are missing at least one column entry. Deleting the rows with missing data would be impractical as it would deplete our data set greatly. Instead, we will use the 'replace' function to insert 'NA' in these places.
+
+``` {r Replace NA}
+NZdata <- replace_na(NZdata,, NA)
+```
+
+Missing values occur when data is of course missing or the information is unavailable. It can also occur when incorrect data types are entered into the system and the data collection program handles this by disregarding the entry.
+
+### Question 3: Provide some general demographic information about your sample.
+
+To understand the background of the students we will look at the "country" column and classify students as either being born in New Zealand or not. From there, we will use ggplot to create a bar chart and show the percentages in each group.
+
+``` {r Demographic Born}
+NZ_country = NZdata$country=="New Zealand"
+
+ggplot(NZdata, aes(x = NZ_country,, fill = NZ_country)) +
+  ggtitle("Students of New Zealand Origin and Others", ) +
+  xlab("Country of origin") +
+  scale_x_discrete(labels = c("Other","New Zealand")) +
+  ylab("Count") +
+  geom_bar(show.legend = FALSE) +
+  geom_text(aes(label=scales::percent(..count../sum(..count..))), stat = "count", vjust = -0.25) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+The majority of students were born in New Zealand at 82.5%, with the other 17.5% born outside of the country.
+
+Another field to inspect is the ethnicity of the students which is spread out over several columns in the data set. First, we will congregate the wanted columns into a new data set and transform the yes/no answers to ones and zeros respectively. Then, a new data frame will be made on the totals of each column. This data frame is graphed with ggplot to show the proportion of students in the given categories.
+
+``` {r Ethnicity}
+df <- NZdata %>% select(new_zealand_european, maori, samoan, cook_islands_maori, tongan, niuean, chinese, indian, other_ethnicity)
+df <- ifelse(df=="no" | is.na(df),0, ifelse(is.character(df),1,1))
+
+sumdata <- data.frame(key = colnames(df) ,value = apply(df,2,sum))
+
+library("snakecase")
+sumdata %>%
+  ggplot(aes(x = key, y = value, fill = key)) +
+  ggtitle("Ethnicity of Students of NZ") +
+  xlab("Ethnicity") +
+  ylab("Count") +
+  scale_x_discrete(labels = function(x) str_wrap(to_any_case(x,"title"), width = 10)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+The vast majority of students are of New Zealand European ethnicity. Maori and Other Ethnicity are both a far second and under that Indian.
+
+### Question 4: What is the most common method of travel to school?
+
+We will explore the methods of transport the students take to get to school. To make it more informative we will also plot the average time taken for each method.
+
+First, we will first isolate the variables we want to look at, specifically "travel_method_to_school" and "travel_time_to_school", using the 'select' function then omit NAs using 'na.omit' and save as travel_data. Then for count we group by "travel_method_to_school", use the 'count' function, and then 'ungroup' function. To calculate the mean, we use the 'aggregate' function to find the average travel time for each 'travel_method_to_school'.
+
+``` {r Travel data}
+# Data
+travel_data = NZdata %>% select(travel_method_to_school, travel_time_to_school) %>% na.omit() 
+
+# Count
+c = travel_data %>% group_by(travel_method_to_school) %>% count() %>% ungroup()
+
+# Mean
+m = aggregate(travel_data[-1],travel_data[1],mean) 
+```
+
+We then create a data frame using 'data.frame' and reshape it using reshape2's 'melt' function so that we can plot two y variables to one x variable.
+
+```{r Travel plot}
+travel_df = data.frame(method = c$travel_method_to_school, count = c$n, mean = m$travel_time_to_school)
+
+library("reshape2")
+(df.long = melt(travel_df,id.vars = 'method'))
+
+df.long %>%
+  ggplot(aes(method,value, fill = variable)) + 
+  geom_bar(stat="identity",position="dodge") +
+  xlab("Method of Travel") + 
+  ylab("") +
+  ggtitle("Method of Travel and Average Time Taken to School") +
+  scale_x_discrete(labels = c("Bike","Boat","Bus","Motor","Other","Scooter","Train","Walk")) +
+  scale_fill_discrete(name = "",labels = c("Number of students","Mean travel time")) +
+  theme(plot.title = element_text(hjust = 0.5, face = 'bold'))
+```
+
+The most common mode of transport to school is motor followed by walk, bus, and bike. The other variables are relatively equal with low numbers. Methods of travel with high average travel time are less common, most notably the train. From the graph, it is evident that students take the method of transport that requires lower average travel time to school.
+
+<!-- EXTRA RESEARCH QUESTION: TRAVEL METHOD VS TRAVEL TIME -->
+<!-- We can also inspect the ratio of travel methods to travel time. -->
+<!-- ``` {r} -->
+<!-- travel_ratio = data.frame(travel_df$method, ratio = travel_df$count/travel_df$mean) -->
+
+<!-- travel_ratio %>% -->
+<!--   ggplot(aes(x = travel_ratio$travel_df.method, y = ratio)) + -->
+<!--   geom_bar(stat = "identity") -->
+<!-- # FIX DETAILING ON GRAPGH -->
+<!-- ``` -->
+<!-- This shows the clear distinction in the prefered methods of transport. -->
+
+### Question 5: What are the most common favourite video games?
+
+Next we will find out what are the most common favourite video games. To do this we will isolate the 'favourite_video_game' column omitting the NA values. We will also lump together any games that have a frequency less than five using forcat's 'fct_lump_min' function into a category called 'Other'.
+
+``` {r Video Games}
+library("forcats")
+games = NZdata$favourite_video_game %>%
+  na.omit() %>%
+  fct_lump_min(min=5) %>%
+  unlist()
+
+games_df <- as.data.frame(table(games, dnn = list("game")), responseName = "freq")
+  
+games_df %>%
+  ggplot(aes(x = game, y = freq, fill = game)) + 
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  xlab("Game") + 
+  ylab("Frequency") +
+  ggtitle("Favourite Video Game") +
+  geom_text(aes(label = freq, vjust = -0.25)) +
+  theme(plot.title = element_text(hjust = 0.5, face = 'bold'))
+```
+
+The majority of students do not have a favourite video game. The most common favourite video game is Fortnite at a frequency of 21 with Minecraft being a very close second at 20 followed by Roblox at 18.
+
+### Question 6: It is hypothesised that 90% of the population are right handed. Does your sample of data support this hypothesis?
+
+To test whether right handedness is equally distributed in the population.
+
+H~0~: 90% of the population are right handed.
+H~1~: 90% of the population are not right handed.
+Assumption: e~1~ = np~i~ >= 5
+
+Note that being ambidextrous was counted under not right handed.
+
+``` {r Right handed}
+
+hands <- NZdata %>% select(handedness) %>% na.omit() %>% count(handedness=="right")
+hands$expected[1] <- (0.1)*sum(hands$n)
+hands$expected[2] <- (0.9)*sum(hands$n)
+
+hands$expected >= 5
+
+# Chi-squared test with two degrees of freedom and two groups.
+tstat = sum(((hands$n - hands$expected)^2/hands$expected))
+
+(pval = 1 - pchisq(tstat, df = 2))
+```
+
+The observed test statistic is 12.730888 and the p-value is 0. Hence we can accept the null hypothesis and conclude that 90% of the population is right handed.
+
+
+### Question 7: Is handedness independent of gender?
+
+To test whether handedness is independent of gender.
+
+H~0~: p~ij~ = p~i~.p~j~ for i = 1,2 and j = 1,2,3
+H~1~: At least one of the eqailities do not hold. 
+Assumptions: e~ij~ = y~i~.y~j~/n >= 5.
+
+``` {r Handedness}
+hands <- NZdata %>% select(gender, handedness) %>% na.omit() %>% group_by(gender, handedness) %>% count()
+
+y_mat = xtabs(n ~ gender + handedness, hands)
+
+yr = apply(y_mat, 1, sum)
+
+yc = apply(y_mat, 2, sum)
+
+yr_mat = matrix(yr, 2,3, byrow = FALSE)
+
+yc_mat = matrix(yc, 2,3, byrow = TRUE)
+
+ey_mat = yr_mat * yc_mat / sum(y_mat)
+
+all(ey_mat >= 5)
+
+(t0 = sum((y_mat-ey_mat)^2/ey_mat))
+
+(pval = 1 - pchisq(t0, (2-1)*(3-1)))
+```
+
+The observed test statistic, t0, is 5.244798 and the p-value is >0.05. Therefore, we keep the null hypothesis and conclude that handedness is independent of gender.
+
+
+### Question 8: What proportion of students own a cell phone? Is this proportion constant across the different year groups?
+
+We will determine the proportion of students who own a cell phone.
+
+``` {r Phone}
+NZdata %>% drop_na(own_cell_phone) %>% 
+  ggplot(aes(x=own_cell_phone,, fill = own_cell_phone)) +
+  geom_bar(show.legend = FALSE) +
+  ggtitle("Proportion of Students Who Own a Cell Phone") +
+  xlab("Owns Cell Phone") +
+  scale_x_discrete(labels = c("No","Yes")) +
+  ylab("Count") +
+  geom_text(aes(label=scales::percent(..count../sum(..count..))), stat = "count", vjust = -0.25) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+The proportion of students who own a cell phone is 73.6%. We will check whether this proportion is constant across all year groups.
+
+``` {r Phone by year group}
+NZdata %>%
+  drop_na(own_cell_phone) %>%
+  ggplot(aes(own_cell_phone, group = year)) +
+  geom_bar(aes(y = ..prop.., fill = factor(..x..)), stat = "count") +
+  ggtitle("Proportion of students in each grade who own a cell phone") +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_discrete(name = "Owns Cell Phone", labels = c("No","Yes")) +
+  ylab("Percentage of grade") +
+  xlab("Owns Cell Phone") +
+  facet_grid(~year)
+```
+
+The proportion of students who own a phone overall does not hold when grouped by year. The lower years tend not to own a cell phone while the mid to higher years almost all own one. We will test whether this observation is statistically significant using test of independence.
+
+H~0~: The proportion of students in each grade who own a cell phone is 73.6%.
+H~1~: The proportion is not 73.6%.
+Assumptions: e~ij~ = y~i~.y~j~/n >= 5.
+
+``` {r Phone statistics}
+fon = NZdata %>% 
+  drop_na(own_cell_phone) %>%
+  group_by(year, own_cell_phone) %>% 
+  count() 
+
+
+p_mat = xtabs(n ~ own_cell_phone + year, fon)
+
+pr = apply(p_mat, 1, sum)
+
+pc = apply(p_mat, 2, sum)
+
+pr_mat = matrix(pr, 2,10, byrow = FALSE)
+
+pc_mat = matrix(pc, 2,10, byrow = TRUE)
+
+ep_mat = pr_mat * pc_mat / sum(p_mat)
+
+all(ep_mat >= 5)
+
+(t0 = sum((abs(p_mat-ep_mat))^2/ep_mat))
+
+(pval = 1 - pchisq(t0, (2-1)*(10-1)))
+```
+
+The p-value is <0.05 so we reject the null hypothesis. The conclusion is that the proportion of students who own cell phones in each year is not 73.6%.
+
+### Question 9: Restricting attention to students in years 7 to 12 who own a cell phone, is there an association between the tendency to check messages as soon as they wake up and feeling anxious when they’re without their phone. Do you get the same answer if you use a Monte Carlo p-value calculation?
+
+We now want to find out whether there is an association between the tendency to check messages as soon as they wake up and feeling anxious when they’re without their phone. We begin with a test of independence with the following hypotheses.
+
+H~0~: There is an association between the tendency to check messages as soon as they wake up and feeling anxious when they’re without their phone.
+H~1~: There is no association to the above.
+Assumptions: e~ij~ = y~i~.y~j~/n >= 5.
+
+``` {r Anxious}
+stot <- NZdata %>% 
+  select(year, own_cell_phone, check_messages_as_soon_as_you_wake_up, feeling_without_phone_anxious) %>%
+  filter(year %in% (7:12) & own_cell_phone == "yes") %>%
+  group_by(check_messages_as_soon_as_you_wake_up, feeling_without_phone_anxious) %>%
+  count()
+
+a_mat = xtabs(n ~ feeling_without_phone_anxious + check_messages_as_soon_as_you_wake_up, stot)
+
+ar = apply(a_mat, 1, sum)
+
+ac = apply(a_mat, 2, sum)
+
+
+ar_mat = matrix(ar, 2,5, byrow = FALSE)
+
+ac_mat = matrix(ac, 2,5, byrow = TRUE)
+
+ea_mat  = ar_mat * ac_mat / sum(a_mat)
+
+all(ea_mat >= 5) # FALSE
+```
+
+Our expected values do not abide by our assumption that they must be larger than five. So we will perform Fisher's test instead.
+
+``` {r Anvious fisher}
+t0 = chisq.test(a_mat)
+
+fisher.test(a_mat)
+```
+
+The p-value is >0.05 so we keep the null hypothesis and conclude there is an association.
+We will check whether we get the same answer if we use a Monte Carlo p-value calculation.
+
+``` {r Monte carlo}
+rowTotals = rowSums(a_mat)
+colTotals = colSums(a_mat)
+
+LargeNumber = 10000
+stat = numeric(length = LargeNumber)
+tables = r2dtable(n = LargeNumber, r = rowTotals, c = colTotals)
+
+for (i in 1:LargeNumber){
+  stat[i] = suppressWarnings(chisq.test(tables[[i]])$statistic)
+}
+t0$statistic
+
+chisq.test(a_mat, simulate.p.value = T, B = LargeNumber)
+
+```
+
+So the p-value is >0.05 so we keep the null hypothesis. We got the same answer in terms of significance but the p-values were different. Using the test of independence it was 0.1075, whereas using Fisher's test we got p = 0.09549.
+
+### Question 10: What other questions could you ask of this data? Pick one and perform an appropriate test.
+
+Another question we could ask is whether eye colours uniformly distributed across the genders for students of New Zealand?
+
+``` {r Extra}
+
+colour = NZdata %>% select(gender, eye_colour) %>% drop_na(eye_colour) %>% group_by(gender, eye_colour) %>% count()
+
+c_mat = xtabs(n ~ gender + eye_colour, colour)
+
+chisq.test(c_mat)
+
+fisher.test(c_mat)
+```
+The p-value is >0.05 so we keep the null hypothesis and conclude eye colours are uniformly distributed across the students of New Zealand.
+
+### Question 11: Are there any limitations of this data set?
+
+There are a few limitations of the data set. Firstly, the sample size of the data set is quite small at 200 entries. As such, there is the possibility that it is not representative of all the students of New Zealand. In addition, there were a lot of missing data entries present in almost every row of the data set. This may have skewed our observations and the statistical analyses we performed. Another issue is response bias as the survey was filled out on a voluntary basis by students in their classrooms. This may also have introduced peer pressure when the students were answering questions of a personal nature. 
+
+
+### References
+
+Hadley Wickham (2007). Reshaping Data with the reshape Package. Journal of Statistical Software, 21(12), 1-
+20. URL: http://www.jstatsoft.org/v21/i12/ (http://www.jstatsoft.org/v21/i12/).
+
+Hadley Wickham. ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York, 2016.
+
+Hadley Wickham (2017). tidyverse: Easily Install and Load the ‘Tidyverse’. R package version 1.2.1.
+https://CRAN.R-project.org/package=tidyverse (https://CRAN.R-project.org/package=tidyverse)
+
+Hadley Wickham, Romain François, Lionel Henry and Kirill Müller (2018). dplyr: A Grammar of Data
+Manipulation. R package version 0.7.6. https://CRAN.R-project.org/package=dplyr (https://CRAN.Rproject.
+org/package=dplyr)
+
+R Core Team (2018). R: A language and environment for statistical computing. R Foundation for Statistical
+Computing, Vienna, Austria. URL: https://www.R-project.org/ (https://www.R-project.org/).
+
